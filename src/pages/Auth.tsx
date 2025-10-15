@@ -85,9 +85,6 @@ const Auth = () => {
               <Button onClick={handleAdminLogin} className="w-full">
                 Admin Login
               </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                Demo password: admin123
-              </p>
             </TabsContent>
           </Tabs>
         </CardContent>
