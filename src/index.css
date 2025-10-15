@@ -179,9 +179,6 @@ All colors MUST be HSL.
   }
 
   .code-editor-line-numbers {
-    position: absolute;
-    left: 0;
-    top: 0;
     padding: 1rem 0.75rem;
     color: #636d83;
     font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
@@ -189,9 +186,11 @@ All colors MUST be HSL.
     line-height: 1.6;
     text-align: right;
     user-select: none;
-    pointer-events: none;
     border-right: 1px solid hsl(220, 13%, 25%);
     background: hsl(220, 13%, 16%);
+    overflow: hidden;
+    white-space: pre;
+    min-width: 50px;
   }
 
   .code-preview-frame {

@@ -36,10 +36,9 @@ const CodeEditor = ({ initialCode = "" }: CodeEditorProps) => {
     toast.success("Code reset to default!");
   };
 
-  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
-    const lineNumbersEl = document.querySelector('.code-editor-line-numbers');
-    if (lineNumbersEl) {
-      lineNumbersEl.scrollTop = e.currentTarget.scrollTop;
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (textareaRef.current) {
+      textareaRef.current.scrollTop = e.currentTarget.scrollTop;
     }
   };
 
@@ -70,22 +69,28 @@ const CodeEditor = ({ initialCode = "" }: CodeEditorProps) => {
             <span className="text-xs text-muted-foreground ml-2">index.html</span>
           </div>
           
-          <div className="relative">
-            <div className="flex">
+          <div className="relative overflow-hidden" style={{ maxHeight: '500px' }}>
+            <div 
+              className="flex overflow-auto" 
+              style={{ maxHeight: '500px' }}
+              onScroll={handleScroll}
+            >
               <pre className="code-editor-line-numbers">
                 {lineNumbers}
               </pre>
               
-              <div className="flex-1 relative">
+              <div className="flex-1">
                 <textarea
                   ref={textareaRef}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  onScroll={handleScroll}
                   className="code-editor-textarea"
                   placeholder="Write your HTML code here..."
                   spellCheck="false"
-                  style={{ paddingLeft: '1rem' }}
+                  style={{ 
+                    paddingLeft: '1rem',
+                    overflow: 'hidden'
+                  }}
                 />
               </div>
             </div>
