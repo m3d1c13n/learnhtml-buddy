@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Copy, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -70,9 +69,9 @@ const CodeEditor = ({ initialCode = "" }: CodeEditorProps) => {
             <span className="text-xs text-muted-foreground ml-2">index.html</span>
           </div>
           
-          <ScrollArea className="h-[500px]">
+          <div className="relative overflow-auto" style={{ maxHeight: '500px' }}>
             <div className="flex">
-              <pre className="code-editor-line-numbers">
+              <pre className="code-editor-line-numbers sticky left-0 bg-background">
                 {lineNumbers}
               </pre>
               
@@ -85,12 +84,13 @@ const CodeEditor = ({ initialCode = "" }: CodeEditorProps) => {
                   placeholder="Write your HTML code here..."
                   spellCheck="false"
                   style={{ 
-                    paddingLeft: '1rem'
+                    paddingLeft: '1rem',
+                    minHeight: '500px'
                   }}
                 />
               </div>
             </div>
-          </ScrollArea>
+          </div>
         </Card>
       </TabsContent>
 
