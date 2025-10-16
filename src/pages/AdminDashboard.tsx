@@ -5,22 +5,57 @@ import { Code, LogOut, Plus } from "lucide-react";
 import TopicList from "@/components/TopicList";
 import TopicForm from "@/components/TopicForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [isAddingTopic, setIsAddingTopic] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const mode = localStorage.getItem("userMode");
-    if (mode !== "admin") {
-      navigate("/");
-    }
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
+
+      // Check if user is admin
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", session.user.id)
+        .single();
+
+      if (!data || data.role !== "admin") {
+        toast.error("You don't have admin access");
+        navigate("/");
+        return;
+      }
+
+      setLoading(false);
+    };
+
+    checkAuth();
   }, [navigate]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("userMode");
-    navigate("/");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

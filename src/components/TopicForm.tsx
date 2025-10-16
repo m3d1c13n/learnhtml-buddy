@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Question {
   id: string;
@@ -43,6 +44,7 @@ const TopicForm = ({ topic, onSuccess }: TopicFormProps) => {
       },
     ]
   );
+  const [loading, setLoading] = useState(false);
 
   const addQuestion = () => {
     setQuestions([
@@ -83,7 +85,7 @@ const TopicForm = ({ topic, onSuccess }: TopicFormProps) => {
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!title || !description || !content) {
@@ -91,28 +93,46 @@ const TopicForm = ({ topic, onSuccess }: TopicFormProps) => {
       return;
     }
 
-    const newTopic: Topic = {
-      id: topic?.id || Date.now().toString(),
+    setLoading(true);
+
+    const filteredQuestions = questions.filter((q) => q.question.trim() !== "");
+    const topicData = {
       title,
       description,
       content,
       example,
-      questions: questions.filter((q) => q.question.trim() !== ""),
+      questions: filteredQuestions as any, // Cast to any to match Json type
     };
 
-    const savedTopics = localStorage.getItem("topics");
-    const topics: Topic[] = savedTopics ? JSON.parse(savedTopics) : [];
+    try {
+      if (topic?.id) {
+        // Update existing topic
+        const { error } = await supabase
+          .from("topics")
+          .update(topicData)
+          .eq("id", topic.id);
 
-    if (topic?.id) {
-      const index = topics.findIndex((t) => t.id === topic.id);
-      topics[index] = newTopic;
-    } else {
-      topics.push(newTopic);
+        if (error) throw error;
+        toast.success("Topic updated successfully");
+      } else {
+        // Create new topic
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        const { error } = await supabase
+          .from("topics")
+          .insert([topicData]); // Wrap in array for insert
+
+        if (error) throw error;
+        toast.success("Topic added successfully");
+      }
+
+      onSuccess();
+    } catch (error: any) {
+      console.error("Error saving topic:", error);
+      toast.error(error.message || "Failed to save topic");
+    } finally {
+      setLoading(false);
     }
-
-    localStorage.setItem("topics", JSON.stringify(topics));
-    toast.success(topic ? "Topic updated successfully" : "Topic added successfully");
-    onSuccess();
   };
 
   return (
@@ -231,8 +251,8 @@ const TopicForm = ({ topic, onSuccess }: TopicFormProps) => {
         ))}
       </div>
 
-      <Button type="submit" className="w-full">
-        {topic ? "Update Topic" : "Add Topic"}
+      <Button type="submit" className="w-full" disabled={loading}>
+        {loading ? "Saving..." : topic ? "Update Topic" : "Add Topic"}
       </Button>
     </form>
   );
