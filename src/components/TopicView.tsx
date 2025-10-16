@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, Code, FileQuestion, CheckCircle } from "lucide-react";
 import CodeEditor from "./CodeEditor";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 interface Question {
   id: string;
@@ -25,12 +24,13 @@ interface Topic {
 
 interface TopicViewProps {
   topic: Topic;
-  userId: string;
-  onProgressUpdate: () => void;
+  studentName: string;
+  progress: any;
+  onUpdateProgress: (progress: any) => void;
   onClose: () => void;
 }
 
-const TopicView = ({ topic, userId, onProgressUpdate, onClose }: TopicViewProps) => {
+const TopicView = ({ topic, studentName, progress, onUpdateProgress, onClose }: TopicViewProps) => {
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: number }>({});
   const [showResults, setShowResults] = useState(false);
   const [examCompleted, setExamCompleted] = useState(false);
@@ -44,7 +44,7 @@ const TopicView = ({ topic, userId, onProgressUpdate, onClose }: TopicViewProps)
     }
   };
 
-  const handleSubmitExam = async () => {
+  const handleSubmitExam = () => {
     if (Object.keys(selectedAnswers).length < topic.questions.length) {
       toast.error("Please answer all questions before submitting");
       return;
@@ -56,53 +56,25 @@ const TopicView = ({ topic, userId, onProgressUpdate, onClose }: TopicViewProps)
       (q) => selectedAnswers[q.id] === q.correctAnswer
     ).length;
     
-    const percentage = Math.round((correctAnswers / topic.questions.length) * 100);
+    const percentage = (correctAnswers / topic.questions.length) * 100;
     const passed = percentage >= 70;
 
-    try {
-      // Check if progress exists
-      const { data: existingProgress } = await supabase
-        .from("student_progress")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("topic_id", topic.id)
-        .single();
+    const newProgress = {
+      ...progress,
+      [topic.id]: {
+        completed: true,
+        examPassed: passed,
+        score: percentage,
+      },
+    };
 
-      if (existingProgress) {
-        // Update existing progress
-        await supabase
-          .from("student_progress")
-          .update({
-            completed: true,
-            score: percentage,
-            completed_at: new Date().toISOString(),
-          })
-          .eq("user_id", userId)
-          .eq("topic_id", topic.id);
-      } else {
-        // Insert new progress
-        await supabase
-          .from("student_progress")
-          .insert({
-            user_id: userId,
-            topic_id: topic.id,
-            completed: true,
-            score: percentage,
-            completed_at: new Date().toISOString(),
-          });
-      }
+    onUpdateProgress(newProgress);
+    setExamCompleted(true);
 
-      onProgressUpdate();
-      setExamCompleted(true);
-
-      if (passed) {
-        toast.success(`Congratulations! You passed with ${percentage}%`);
-      } else {
-        toast.error(`You scored ${percentage}%. Need 70% to pass. Try again!`);
-      }
-    } catch (error: any) {
-      console.error("Error saving progress:", error);
-      toast.error("Failed to save progress");
+    if (passed) {
+      toast.success(`Congratulations! You passed with ${Math.round(percentage)}%`);
+    } else {
+      toast.error(`You scored ${Math.round(percentage)}%. Need 70% to pass. Try again!`);
     }
   };
 
@@ -112,42 +84,16 @@ const TopicView = ({ topic, userId, onProgressUpdate, onClose }: TopicViewProps)
     setExamCompleted(false);
   };
 
-  const handleMarkComplete = async () => {
-    try {
-      // Check if progress exists
-      const { data: existingProgress } = await supabase
-        .from("student_progress")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("topic_id", topic.id)
-        .single();
-
-      if (existingProgress) {
-        // Update existing progress
-        await supabase
-          .from("student_progress")
-          .update({
-            completed: true,
-          })
-          .eq("user_id", userId)
-          .eq("topic_id", topic.id);
-      } else {
-        // Insert new progress
-        await supabase
-          .from("student_progress")
-          .insert({
-            user_id: userId,
-            topic_id: topic.id,
-            completed: true,
-          });
-      }
-
-      onProgressUpdate();
-      toast.success("Topic marked as completed!");
-    } catch (error: any) {
-      console.error("Error saving progress:", error);
-      toast.error("Failed to save progress");
-    }
+  const handleMarkComplete = () => {
+    const newProgress = {
+      ...progress,
+      [topic.id]: {
+        ...progress[topic.id],
+        completed: true,
+      },
+    };
+    onUpdateProgress(newProgress);
+    toast.success("Topic marked as completed!");
   };
 
   return (

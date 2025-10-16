@@ -7,94 +7,40 @@ import { BookOpen, Code, Trophy, LogOut, BarChart } from "lucide-react";
 import TopicList from "@/components/TopicList";
 import CodeEditor from "@/components/CodeEditor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const [studentName, setStudentName] = useState("");
-  const [userId, setUserId] = useState<string>("");
-  const [topics, setTopics] = useState<any[]>([]);
-  const [progress, setProgress] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState<any>({});
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        navigate("/auth");
-        return;
-      }
-
-      // Check if user is student
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", session.user.id)
-        .single();
-
-      if (!roleData || roleData.role !== "student") {
-        toast.error("You don't have student access");
-        navigate("/");
-        return;
-      }
-
-      // Get user profile
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", session.user.id)
-        .single();
-
-      setStudentName(profile?.display_name || "Student");
-      setUserId(session.user.id);
-
-      // Load topics and progress
-      await loadData(session.user.id);
-      setLoading(false);
-    };
-
-    checkAuth();
+    const mode = localStorage.getItem("userMode");
+    const name = localStorage.getItem("studentName");
+    
+    if (mode !== "student" || !name) {
+      navigate("/");
+      return;
+    }
+    
+    setStudentName(name);
+    
+    // Load progress from localStorage
+    const savedProgress = localStorage.getItem(`progress_${name}`);
+    if (savedProgress) {
+      setProgress(JSON.parse(savedProgress));
+    }
   }, [navigate]);
 
-  const loadData = async (userId: string) => {
-    // Load topics
-    const { data: topicsData } = await supabase
-      .from("topics")
-      .select("*")
-      .order("created_at", { ascending: true });
-
-    setTopics(topicsData || []);
-
-    // Load progress
-    const { data: progressData } = await supabase
-      .from("student_progress")
-      .select("*")
-      .eq("user_id", userId);
-
-    setProgress(progressData || []);
+  const handleLogout = () => {
+    localStorage.removeItem("userMode");
+    localStorage.removeItem("studentName");
+    navigate("/");
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
-  };
-
-  const completedTopics = progress.filter((p: any) => p.completed).length;
+  const completedTopics = Object.values(progress).filter((p: any) => p?.completed).length;
+  const topics = JSON.parse(localStorage.getItem("topics") || "[]");
   const totalTopics = topics.length;
   const progressPercentage = totalTopics > 0 ? (completedTopics / totalTopics) * 100 : 0;
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -146,7 +92,7 @@ const StudentDashboard = () => {
               </CardContent>
             </Card>
 
-            <TopicList mode="student" studentName={studentName} userId={userId} onProgressUpdate={loadData} />
+            <TopicList mode="student" studentName={studentName} />
           </TabsContent>
 
           <TabsContent value="editor">
@@ -192,7 +138,7 @@ const StudentDashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {progress.filter((p: any) => p.score && p.score >= 70).length}
+                    {Object.values(progress).filter((p: any) => p?.examPassed).length}
                   </div>
                   <p className="text-xs text-muted-foreground">Keep learning!</p>
                 </CardContent>
@@ -206,17 +152,16 @@ const StudentDashboard = () => {
               <CardContent>
                 <div className="space-y-4">
                   {topics.map((topic: any) => {
-                    const topicProgress = progress.find((p: any) => p.topic_id === topic.id);
-                    const examPassed = topicProgress?.score && topicProgress.score >= 70;
+                    const topicProgress = progress[topic.id] || {};
                     return (
                       <div key={topic.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div>
                           <h3 className="font-semibold">{topic.title}</h3>
                           <p className="text-sm text-muted-foreground">
-                            {examPassed ? `Exam passed (${topicProgress.score}%)` : topicProgress?.completed ? "Completed" : "Not started"}
+                            {topicProgress.examPassed ? "Exam passed" : topicProgress.completed ? "Completed" : "Not started"}
                           </p>
                         </div>
-                        {examPassed && (
+                        {topicProgress.examPassed && (
                           <Trophy className="w-5 h-5 text-success" />
                         )}
                       </div>
