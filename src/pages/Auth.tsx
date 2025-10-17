@@ -26,7 +26,7 @@ const Auth = () => {
   };
 
   const handleAdminLogin = () => {
-    if (adminPassword === "admin123") {
+    if (adminPassword === "ABC!@#321") {
       localStorage.setItem("userMode", "admin");
       toast.success("Admin login successful");
       navigate("/admin");
