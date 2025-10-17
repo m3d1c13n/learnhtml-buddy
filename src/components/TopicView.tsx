@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, Code, FileQuestion, CheckCircle } from "lucide-react";
 import CodeEditor from "./CodeEditor";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Question {
   id: string;
@@ -30,6 +31,18 @@ interface TopicViewProps {
   onClose: () => void;
 }
 
+// Generate a consistent user ID from student name
+const getUserId = (name: string) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    const char = name.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  const hashStr = Math.abs(hash).toString(16).padStart(32, '0');
+  return `${hashStr.slice(0,8)}-${hashStr.slice(8,12)}-${hashStr.slice(12,16)}-${hashStr.slice(16,20)}-${hashStr.slice(20,32)}`;
+};
+
 const TopicView = ({ topic, studentName, progress, onUpdateProgress, onClose }: TopicViewProps) => {
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: number }>({});
   const [showResults, setShowResults] = useState(false);
@@ -44,7 +57,7 @@ const TopicView = ({ topic, studentName, progress, onUpdateProgress, onClose }: 
     }
   };
 
-  const handleSubmitExam = () => {
+  const handleSubmitExam = async () => {
     if (Object.keys(selectedAnswers).length < topic.questions.length) {
       toast.error("Please answer all questions before submitting");
       return;
@@ -71,6 +84,24 @@ const TopicView = ({ topic, studentName, progress, onUpdateProgress, onClose }: 
     onUpdateProgress(newProgress);
     setExamCompleted(true);
 
+    // Save to Supabase
+    try {
+      const userId = getUserId(studentName);
+      await supabase
+        .from("student_progress")
+        .upsert({
+          user_id: userId,
+          topic_id: topic.id,
+          completed: true,
+          score: Math.round(percentage),
+          completed_at: new Date().toISOString()
+        }, {
+          onConflict: "user_id,topic_id"
+        });
+    } catch (error: any) {
+      console.error("Failed to save progress:", error);
+    }
+
     if (passed) {
       toast.success(`Congratulations! You passed with ${Math.round(percentage)}%`);
     } else {
@@ -84,7 +115,7 @@ const TopicView = ({ topic, studentName, progress, onUpdateProgress, onClose }: 
     setExamCompleted(false);
   };
 
-  const handleMarkComplete = () => {
+  const handleMarkComplete = async () => {
     const newProgress = {
       ...progress,
       [topic.id]: {
@@ -93,6 +124,24 @@ const TopicView = ({ topic, studentName, progress, onUpdateProgress, onClose }: 
       },
     };
     onUpdateProgress(newProgress);
+
+    // Save to Supabase
+    try {
+      const userId = getUserId(studentName);
+      await supabase
+        .from("student_progress")
+        .upsert({
+          user_id: userId,
+          topic_id: topic.id,
+          completed: true,
+          completed_at: new Date().toISOString()
+        }, {
+          onConflict: "user_id,topic_id"
+        });
+    } catch (error: any) {
+      console.error("Failed to save progress:", error);
+    }
+
     toast.success("Topic marked as completed!");
   };
 

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import TopicForm from "./TopicForm";
 import TopicView from "./TopicView";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Topic {
   id: string;
@@ -28,11 +29,24 @@ interface TopicListProps {
   studentName?: string;
 }
 
+// Generate a consistent user ID from student name
+const getUserId = (name: string) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    const char = name.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  const hashStr = Math.abs(hash).toString(16).padStart(32, '0');
+  return `${hashStr.slice(0,8)}-${hashStr.slice(8,12)}-${hashStr.slice(12,16)}-${hashStr.slice(16,20)}-${hashStr.slice(20,32)}`;
+};
+
 const TopicList = ({ mode, studentName }: TopicListProps) => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [viewingTopic, setViewingTopic] = useState<Topic | null>(null);
   const [progress, setProgress] = useState<any>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadTopics();
@@ -41,98 +55,105 @@ const TopicList = ({ mode, studentName }: TopicListProps) => {
     }
   }, [mode, studentName]);
 
-  const loadTopics = () => {
-    const savedTopics = localStorage.getItem("topics");
-    if (savedTopics) {
-      setTopics(JSON.parse(savedTopics));
-    } else {
-      // Initialize with default topics
-      const defaultTopics: Topic[] = [
-        {
-          id: "1",
-          title: "HTML Basics",
-          description: "Learn the fundamental HTML tags and structure",
-          content: "HTML (HyperText Markup Language) is the standard markup language for creating web pages. It describes the structure of a web page using elements and tags.\n\nBasic HTML structure:\n- <!DOCTYPE html>: Declaration\n- <html>: Root element\n- <head>: Meta information\n- <body>: Visible content",
-          example: '<!DOCTYPE html>\n<html>\n<head>\n  <title>My First Page</title>\n</head>\n<body>\n  <h1>Hello World!</h1>\n  <p>This is my first HTML page.</p>\n</body>\n</html>',
-          questions: [
-            {
-              id: "q1",
-              question: "What does HTML stand for?",
-              options: ["HyperText Markup Language", "High Tech Modern Language", "Home Tool Markup Language", "Hyperlinks Text Mark Language"],
-              correctAnswer: 0
-            }
-          ]
-        },
-        {
-          id: "2",
-          title: "HTML Tables",
-          description: "Create and style tables in HTML",
-          content: "HTML tables allow you to arrange data in rows and columns. Tables are defined with the <table> tag.\n\nKey table elements:\n- <tr>: Table row\n- <td>: Table data cell\n- <th>: Table header cell\n- <thead>: Groups header content\n- <tbody>: Groups body content",
-          example: '<table border="1">\n  <thead>\n    <tr>\n      <th>Name</th>\n      <th>Age</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>John</td>\n      <td>25</td>\n    </tr>\n    <tr>\n      <td>Jane</td>\n      <td>30</td>\n    </tr>\n  </tbody>\n</table>',
-          questions: [
-            {
-              id: "q2",
-              question: "Which tag is used to create a table row?",
-              options: ["<td>", "<tr>", "<table>", "<th>"],
-              correctAnswer: 1
-            }
-          ]
-        },
-        {
-          id: "3",
-          title: "HTML Lists",
-          description: "Learn about ordered and unordered lists",
-          content: "HTML provides two main types of lists:\n\n1. Unordered Lists (<ul>): Items marked with bullets\n2. Ordered Lists (<ol>): Items marked with numbers\n\nList items are defined with <li> tag.\n\nYou can also nest lists within lists for complex structures.",
-          example: '<!-- Unordered List -->\n<ul>\n  <li>HTML</li>\n  <li>CSS</li>\n  <li>JavaScript</li>\n</ul>\n\n<!-- Ordered List -->\n<ol>\n  <li>First Step</li>\n  <li>Second Step</li>\n  <li>Third Step</li>\n</ol>',
-          questions: [
-            {
-              id: "q3",
-              question: "Which tag creates an unordered list?",
-              options: ["<ol>", "<ul>", "<list>", "<li>"],
-              correctAnswer: 1
-            }
-          ]
-        }
-      ];
-      localStorage.setItem("topics", JSON.stringify(defaultTopics));
-      setTopics(defaultTopics);
+  const loadTopics = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("topics")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setTopics((data as any) || []);
+    } catch (error: any) {
+      toast.error("Failed to load topics: " + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadProgress = () => {
-    const savedProgress = localStorage.getItem(`progress_${studentName}`);
-    if (savedProgress) {
-      setProgress(JSON.parse(savedProgress));
+  const loadProgress = async () => {
+    if (!studentName) return;
+    
+    try {
+      const userId = getUserId(studentName);
+      const { data, error } = await supabase
+        .from("student_progress")
+        .select("*")
+        .eq("user_id", userId);
+
+      if (error) throw error;
+
+      const progressMap: any = {};
+      data?.forEach(p => {
+        progressMap[p.topic_id] = {
+          completed: p.completed,
+          examPassed: p.score ? p.score >= 70 : false,
+          score: p.score
+        };
+      });
+      setProgress(progressMap);
+    } catch (error: any) {
+      console.error("Failed to load progress:", error);
     }
   };
 
-  const saveTopics = (newTopics: Topic[]) => {
-    localStorage.setItem("topics", JSON.stringify(newTopics));
-    setTopics(newTopics);
-  };
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this topic?")) return;
+    
+    try {
+      const { error } = await supabase
+        .from("topics")
+        .delete()
+        .eq("id", id);
 
-  const handleDelete = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this topic?")) {
-      const newTopics = topics.filter(t => t.id !== id);
-      saveTopics(newTopics);
+      if (error) throw error;
+      
+      setTopics(topics.filter(t => t.id !== id));
       toast.success("Topic deleted successfully");
+    } catch (error: any) {
+      toast.error("Failed to delete topic: " + error.message);
     }
   };
 
   const handleEdit = (topic: Topic) => {
-    setEditingTopic(topic);
+    setEditingTopic(topic as any);
   };
 
   const handleView = (topic: Topic) => {
     setViewingTopic(topic);
   };
 
-  const handleUpdateProgress = (updatedProgress: any) => {
+  const handleUpdateProgress = async (updatedProgress: any) => {
     setProgress(updatedProgress);
-    if (studentName) {
-      localStorage.setItem(`progress_${studentName}`, JSON.stringify(updatedProgress));
+    
+    if (!studentName) return;
+    
+    // Save to Supabase
+    const userId = getUserId(studentName);
+    for (const [topicId, progressData] of Object.entries(updatedProgress)) {
+      const data: any = progressData;
+      try {
+        await supabase
+          .from("student_progress")
+          .upsert({
+            user_id: userId,
+            topic_id: topicId,
+            completed: data.completed || false,
+            score: data.score || null,
+            completed_at: data.completed ? new Date().toISOString() : null
+          }, {
+            onConflict: "user_id,topic_id"
+          });
+      } catch (error: any) {
+        console.error("Failed to save progress:", error);
+      }
     }
   };
+
+  if (loading) {
+    return <div className="text-center py-12">Loading topics...</div>;
+  }
 
   if (topics.length === 0 && mode === "admin") {
     return (
